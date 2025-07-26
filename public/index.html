@@ -85,24 +85,24 @@
             // Damage Popups
             for (let i = damagePopups.length - 1; i >= 0; i--) {
                 const d = damagePopups[i];
-                ctx.font = '20px sans-serif';
-                ctx.fillStyle = 'white';
-                ctx.shadowColor = 'white';
+                ctx.font = '24px impact';
+                ctx.fillStyle = d.color; // shadow color
+                ctx.shadowColor = 'black';
                 ctx.shadowBlur = 1;
                 ctx.fillText(d.amount, d.x, d.y);
-                ctx.fillStyle = d.color;
-                ctx.fillText(d.amount, d.x - 1, d.y - 1);
+                ctx.fillStyle = 'white'; // main dmg number color
+                ctx.fillText(d.amount, d.x - 2, d.y - 2);
                 ctx.shadowBlur = 0;
-                d.y += d.dy;
+                d.y += d.dy * 2;
                 d.alpha -= 0.02;
                 if (d.alpha <= 0) damagePopups.splice(i, 1);
             }
 
             // Leaderboard
-            ctx.font = '2rem calibri';
+            ctx.font = '2rem calibri ';
             ctx.textAlign = 'left';
             ctx.fillStyle = 'white';
-            ctx.fillText('Damage Leaderboard:', 10, 35);
+            ctx.fillText('Damage Leaderboard', 10, 35);
 
             let rankY = 65;
             for (const [id, dmg] of Object.entries(fullDamageLog).sort((a, b) => b[1] - a[1])) {
@@ -116,15 +116,15 @@
             // Draw self indicator (bottom center)
             const me = players.find(p => p.id === myId);
             if (me) {
-                ctx.font = '16px sans-serif';
+                ctx.font = '16px impact';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'bottom';
                 ctx.fillStyle = 'white';
-                ctx.fillText('You are:', canvas.width / 2, canvas.height - 30);
+                ctx.fillText('You are', canvas.width / 2, canvas.height - 15);
 
                 // Draw a circle in your color
                 ctx.beginPath();
-                ctx.arc(canvas.width / 2, canvas.height - 10, 8, 0, Math.PI * 2);
+                ctx.arc(canvas.width / 2 + 40, canvas.height - 25, 8, 0, Math.PI * 2);
                 ctx.fillStyle = me.color;
                 ctx.fill();
             }
