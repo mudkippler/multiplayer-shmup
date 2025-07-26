@@ -10,7 +10,7 @@ const wss = new WebSocket.Server({ server });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-const TICK_RATE = 30;
+const TICK_RATE = 60;
 const BULLET_SPEED = 5;
 const players = {};
 const bullets = [];

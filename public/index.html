@@ -22,7 +22,12 @@
         const socket = new WebSocket(`ws://${location.host}`);
         let myId = null;
         let serverPlayers = [], bullets = [], dummy = {}, myColor = null;
-        const interpPlayers = new Map();
+        //const interpPlayers = new Map();
+        const snapshots = []; // Array of { time: ms, players: Map<id, {x, y, color}> }
+        const SNAPSHOT_DELAY = 100; // ms
+        const MAX_SNAPSHOTS = 60;   // Just in case
+
+
         const damagePopups = [];
         const myHits = [];
 
@@ -42,23 +47,19 @@
                 myColor = data.color;
             }
             else if (data.type === 'state') {
-                serverPlayers = data.players;
-                bullets = data.bullets;
                 dummy = data.dummy;
+                bullets = data.bullets;
                 fullDamageLog = data.damageLog;
 
-                for (let i = 0; i < serverPlayers.length; i++) {
-                    const p = serverPlayers[i];
-                    const existing = interpPlayers.get(p.id) || { x: p.x, y: p.y };
-                    interpPlayers.set(p.id, {
-                        prevX: existing.x,
-                        prevY: existing.y,
-                        x: p.x,
-                        y: p.y,
-                        color: p.color,
-                        id: p.id
-                    });
+                const snapTime = performance.now();
+                const playerMap = new Map();
+
+                for (const p of data.players) {
+                    playerMap.set(p.id, { x: p.x, y: p.y, color: p.color });
                 }
+
+                snapshots.push({ time: snapTime, players: playerMap });
+                if (snapshots.length > MAX_SNAPSHOTS) snapshots.shift();
             }
             else if (data.type === 'damage') {
                 damagePopups.push({
@@ -75,7 +76,6 @@
 
         let lastRender = performance.now();
         function draw(now) {
-            const delta = (now - lastRender) / (1000 / 30); // relative to tick rate
             lastRender = now;
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -86,15 +86,32 @@
             ctx.arc(dummy.x, dummy.y, dummy.radius, 0, Math.PI * 2);
             ctx.fill();
 
-            // Players (interpolated)
-            for (const p of interpPlayers.values()) {
-                const ix = p.prevX + (p.x - p.prevX) * delta;
-                const iy = p.prevY + (p.y - p.prevY) * delta;
-                ctx.fillStyle = p.color;
-                ctx.beginPath();
-                ctx.arc(ix, iy, 10, 0, Math.PI * 2);
-                ctx.fill();
-                p.prevX = ix; p.prevY = iy;
+            // Players with interpolation from snapshot history
+            const renderTime = now - SNAPSHOT_DELAY;
+
+            // Find the two snapshots to interpolate between
+            let older, newer;
+            for (let i = snapshots.length - 1; i >= 0; i--) {
+                if (snapshots[i].time <= renderTime) {
+                    older = snapshots[i];
+                    newer = snapshots[i + 1];
+                    break;
+                }
+            }
+
+            if (older && newer) {
+                const t = (renderTime - older.time) / (newer.time - older.time);
+                for (const [id, pOld] of older.players) {
+                    const pNew = newer.players.get(id);
+                    if (!pNew) continue;
+
+                    const ix = pOld.x + (pNew.x - pOld.x) * t;
+                    const iy = pOld.y + (pNew.y - pOld.y) * t;
+                    ctx.fillStyle = pOld.color;
+                    ctx.beginPath();
+                    ctx.arc(ix, iy, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                }
             }
 
             // Bullets
@@ -135,9 +152,10 @@
             ctx.fillText('Damage Leaderboard:', 10, 20);
 
             let rankY = 40;
+            const latestSnapshot = snapshots.at(-1)?.players;
+
             for (const [id, dmg] of Object.entries(fullDamageLog).sort((a, b) => b[1] - a[1])) {
-                const player = interpPlayers.get(id);
-                const color = player?.color || 'white';
+                const color = latestSnapshot?.get(id)?.color || 'white';
                 ctx.fillStyle = color;
                 ctx.fillText(`${Math.floor(dmg)} dmg`, 10, rankY);
                 rankY += 20;
