@@ -33,7 +33,7 @@ wss.on('connection', (ws) => {
   damageLog[id] = 0;
   ws.id = id;
 
-  ws.send(JSON.stringify({ type: 'init', id, color: players[id].color, dummy }));
+  ws.send(JSON.stringify({ type: 'init', id, dummy }));
 
   ws.on('message', (msg) => {
     try {
@@ -95,7 +95,6 @@ function gameLoop() {
         y: p.y,
         dx: 0,
         dy: -BULLET_SPEED,
-        color: p.color,
         owner: id
       });
     }
@@ -106,6 +105,33 @@ function gameLoop() {
     const b = bullets[i];
     b.x += b.dx;
     b.y += b.dy;
+
+    let hit = false;
+    // Player collision
+    for (const id in players) {
+      if (id === b.owner) continue;
+      const p = players[id];
+      const dist = Math.hypot(b.x - p.x, b.y - p.y);
+      if (dist < 10) { // Player radius
+        damageLog[b.owner] = (damageLog[b.owner] || 0) - 10;
+        wss.clients.forEach(ws => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: 'damage',
+              x: b.x,
+              y: b.y,
+              amount: -10,
+              owner: b.owner
+            }));
+          }
+        });
+        bullets.splice(i, 1);
+        hit = true;
+        break;
+      }
+    }
+
+    if (hit) continue;
 
     // Check collision with dummy
     const dist = Math.hypot(b.x - dummy.x, b.y - dummy.y);
@@ -118,7 +144,6 @@ function gameLoop() {
             x: b.x,
             y: b.y,
             amount: 10,
-            color: b.color,
             owner: b.owner
           }));
         }
@@ -138,7 +163,7 @@ function gameLoop() {
         y: p.y,
         color: p.color
     })),
-    bullets
+    bullets: bullets.map(b => ({ x: b.x, y: b.y, owner: b.owner }))
   };
 
   for (const client of wss.clients) {
