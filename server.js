@@ -11,7 +11,8 @@ const wss = new WebSocket.Server({ server });
 app.use(express.static(path.join(__dirname, 'public')));
 
 const TICK_RATE = 60;
-const BULLET_SPEED = 5;
+const BULLET_SPEED = 15;
+const PLAYER_SPEED = 5;
 const players = {};
 const bullets = [];
 const dummy = { x: 400, y: 300, radius: 30, health: Infinity };
@@ -67,18 +68,17 @@ function gameLoop() {
       p.vy /= len;
     }
 
-    const speed = 3.5;
-    p.x += p.vx * speed;
-    p.y += p.vy * speed;
+    p.x += p.vx * PLAYER_SPEED;
+    p.y += p.vy * PLAYER_SPEED;
 
     // Shoot bullets
-    if ((p.keys[' '] || p.keys['Space']) && now - p.lastShot > 300) {
+    if ((p.keys[' '] || p.keys['Space']) && now - p.lastShot > 200) {
       p.lastShot = now;
       bullets.push({
         x: p.x,
         y: p.y,
-        dx: p.vx * BULLET_SPEED || 0,
-        dy: p.vy * BULLET_SPEED || -BULLET_SPEED, // shoot up if standing still
+        dx: 0,
+        dy: -BULLET_SPEED,
         color: p.color,
         owner: id
       });
