@@ -83,6 +83,10 @@ function gameLoop() {
     p.x += p.vx * PLAYER_SPEED;
     p.y += p.vy * PLAYER_SPEED;
 
+    // Clamp player position to screen bounds
+    p.x = Math.max(0, Math.min(800, p.x));
+    p.y = Math.max(0, Math.min(600, p.y));
+
     // Shoot bullets
     if ((p.keys[' '] || p.keys['Space']) && now - p.lastShot > 200) {
       p.lastShot = now;
