@@ -27,18 +27,20 @@ wss.on('connection', (ws) => {
     vy: 0,
     color: `hsl(${Math.random() * 360}, 100%, 50%)`,
     keys: {},
-    lastShot: 0
+    lastShot: 0,
+    lastActive: Date.now()
   };
   damageLog[id] = 0;
   ws.id = id;
 
-  ws.send(JSON.stringify({ type: 'init', id, color: players[id].color }));
+  ws.send(JSON.stringify({ type: 'init', id, color: players[id].color, dummy }));
 
   ws.on('message', (msg) => {
     try {
       const data = JSON.parse(msg);
       if (data.type === 'keydown' || data.type === 'keyup') {
         players[id].keys[data.key] = data.type === 'keydown';
+        players[id].lastActive = Date.now();
       }
     } catch (e) {}
   });
@@ -51,6 +53,16 @@ wss.on('connection', (ws) => {
 
 function gameLoop() {
   const now = Date.now();
+
+
+  // Despawn players inactive for 60 seconds
+  for (const id in players) {
+    if (now - players[id].lastActive > 60000) {
+      console.log(`Despawning inactive player: ${id}`);
+      delete players[id];
+      delete damageLog[id];
+    }
+  }
 
   // Update players
   for (const id in players) {
@@ -117,12 +129,12 @@ function gameLoop() {
   const state = {
     type: 'state',
     players: Object.entries(players).map(([id, p]) => ({
-        ...p,
-        id
+        id,
+        x: p.x,
+        y: p.y,
+        color: p.color
     })),
-    bullets,
-    dummy,
-    damageLog
+    bullets
   };
 
   for (const client of wss.clients) {
@@ -133,6 +145,19 @@ function gameLoop() {
 }
 
 setInterval(gameLoop, 1000 / TICK_RATE);
+
+// Send leaderboard updates less frequently
+setInterval(() => {
+    const leaderboard = {
+        type: 'leaderboard',
+        damageLog
+    };
+    for (const client of wss.clients) {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(leaderboard));
+        }
+    }
+}, 1000);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

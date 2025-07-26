@@ -19,7 +19,8 @@
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
 
-        const socket = new WebSocket(`${location.hostname === "localhost" ? "ws" : "wss"}://${location.host}`);
+        const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
+
         let myId = null;
         let players = [];
         let bullets = [];
@@ -31,10 +32,11 @@
             const data = JSON.parse(e.data);
             if (data.type === 'init') {
                 myId = data.id;
+                dummy = data.dummy;
             } else if (data.type === 'state') {
                 players = data.players;
                 bullets = data.bullets;
-                dummy = data.dummy;
+            } else if (data.type === 'leaderboard') {
                 fullDamageLog = data.damageLog;
             } else if (data.type === 'damage') {
                 damagePopups.push({
