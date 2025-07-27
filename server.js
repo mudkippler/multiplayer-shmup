@@ -15,8 +15,10 @@ const BULLET_SPEED = 15;
 const PLAYER_SPEED = 5;
 const players = {};
 const bullets = [];
-const dummy = { x: 400, y: 300, radius: 30, health: Infinity };
+const bossBullets = [];
+const dummy = { x: 400, y: 100, radius: 30, health: Infinity };
 const damageLog = {}; // id -> total damage
+let lastBossAttack = 0;
 
 wss.on('connection', (ws) => {
   const id = uuidv4();
@@ -28,7 +30,8 @@ wss.on('connection', (ws) => {
     color: `hsl(${Math.random() * 360}, 100%, 50%)`,
     keys: {},
     lastShot: 0,
-    lastActive: Date.now()
+    lastActive: Date.now(),
+    health: 100
   };
   damageLog[id] = 0;
   ws.id = id;
@@ -100,6 +103,22 @@ function gameLoop() {
     }
   }
 
+  // Boss attacks
+  if (now - lastBossAttack > 2000) {
+    lastBossAttack = now;
+    const angleIncrement = Math.PI * 2 / 12;
+    for (let i = 0; i < 12; i++) {
+        const angle = i * angleIncrement;
+        bossBullets.push({
+            x: dummy.x,
+            y: dummy.y,
+            dx: Math.cos(angle) * 5,
+            dy: Math.sin(angle) * 5,
+            color: 'cyan'
+        });
+    }
+  }
+
   // Update bullets
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
@@ -113,7 +132,21 @@ function gameLoop() {
       const p = players[id];
       const dist = Math.hypot(b.x - p.x, b.y - p.y);
       if (dist < 10) { // Player radius
+        p.health -= 10;
         damageLog[b.owner] = (damageLog[b.owner] || 0) - 10;
+
+        if (p.health <= 0) {
+            for (const client of wss.clients) {
+                if (client.id === id) {
+                    if (client.readyState === WebSocket.OPEN) {
+                        client.send(JSON.stringify({ type: 'dead' }));
+                    }
+                    client.terminate(); // Triggers 'close' event which handles cleanup
+                    break;
+                }
+            }
+        }
+
         wss.clients.forEach(ws => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
@@ -154,6 +187,38 @@ function gameLoop() {
     }
   }
 
+  // Update boss bullets
+  for (let i = bossBullets.length - 1; i >= 0; i--) {
+    const b = bossBullets[i];
+    b.x += b.dx;
+    b.y += b.dy;
+
+    for (const id in players) {
+        const p = players[id];
+        const dist = Math.hypot(b.x - p.x, b.y - p.y);
+        if (dist < 10) { // Player radius
+            p.health -= 10;
+            if (p.health <= 0) {
+                for (const client of wss.clients) {
+                    if (client.id === id) {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(JSON.stringify({ type: 'dead' }));
+                        }
+                        client.terminate();
+                        break;
+                    }
+                }
+            }
+            bossBullets.splice(i, 1);
+            break;
+        }
+    }
+
+    if (b.x < 0 || b.x > 800 || b.y < 0 || b.y > 600) {
+        bossBullets.splice(i, 1);
+    }
+  }
+
   // Send game state
   const state = {
     type: 'state',
@@ -161,9 +226,11 @@ function gameLoop() {
         id,
         x: p.x,
         y: p.y,
-        color: p.color
+        color: p.color,
+        health: p.health
     })),
-    bullets: bullets.map(b => ({ x: b.x, y: b.y, owner: b.owner }))
+    bullets: bullets.map(b => ({ x: b.x, y: b.y, owner: b.owner })),
+    bossBullets
   };
 
   for (const client of wss.clients) {

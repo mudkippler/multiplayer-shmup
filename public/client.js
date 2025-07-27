@@ -1,10 +1,12 @@
 import { draw } from './renderer.js';
+import { updateHUD } from './hud.js';
 
 const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
 
 let myId = null;
 let players = {};
 let bullets = [];
+let bossBullets = [];
 let dummy = {};
 let fullDamageLog = {};
 const damagePopups = [];
@@ -23,6 +25,7 @@ socket.addEventListener('message', e => {
         players = newPlayers;
 
         bullets = data.bullets;
+        bossBullets = data.bossBullets;
     } else if (data.type === 'leaderboard') {
         fullDamageLog = data.damageLog;
     } else if (data.type === 'damage') {
@@ -35,6 +38,8 @@ socket.addEventListener('message', e => {
             alpha: 1,
             dy: -0.5
         });
+    } else if (data.type === 'dead') {
+        document.getElementById('death-screen').style.display = 'block';
     }
 });
 
@@ -46,7 +51,9 @@ document.addEventListener('keyup', e => {
 });
 
 function gameLoop() {
-    draw(myId, Object.values(players), bullets, dummy, fullDamageLog, damagePopups);
+    const playerList = Object.values(players);
+    draw(myId, playerList, bullets, bossBullets, dummy, fullDamageLog, damagePopups);
+    updateHUD(myId, playerList);
     requestAnimationFrame(gameLoop);
 }
 

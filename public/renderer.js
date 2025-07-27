@@ -1,7 +1,7 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-export function draw(myId, players, bullets, dummy, fullDamageLog, damagePopups) {
+export function draw(myId, players, bullets, bossBullets, dummy, fullDamageLog, damagePopups) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Dummy
@@ -16,6 +16,14 @@ export function draw(myId, players, bullets, dummy, fullDamageLog, damagePopups)
         ctx.beginPath();
         ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
         ctx.fill();
+
+        // Health bar
+        const healthPercentage = p.health / 100;
+        const hue = healthPercentage * 120;
+        ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+        ctx.fillRect(p.x - 15, p.y - 20, 30 * healthPercentage, 5);
+        ctx.strokeStyle = 'black';
+        ctx.strokeRect(p.x - 15, p.y - 20, 30, 5);
     }
 
     // Bullets
@@ -24,6 +32,14 @@ export function draw(myId, players, bullets, dummy, fullDamageLog, damagePopups)
         ctx.fillStyle = owner?.color || 'white';
         ctx.beginPath();
         ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Boss Bullets
+    for (const b of bossBullets) {
+        ctx.fillStyle = b.color;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 6, 0, Math.PI * 2);
         ctx.fill();
     }
 
