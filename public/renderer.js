@@ -37,7 +37,11 @@ export function draw(myId, players, bullets, bossBullets, dummy, fullDamageLog, 
 
     // Boss Bullets
     for (const b of bossBullets) {
-        ctx.fillStyle = b.color;
+        if (b.size === 6) {
+            ctx.fillStyle = 'cyan';
+        } else if (b.size === 20) {
+            ctx.fillStyle = 'red';
+        }
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
         ctx.fill();
