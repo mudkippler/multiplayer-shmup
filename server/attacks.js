@@ -11,6 +11,7 @@ module.exports.circularAttack = function(dummy, bossBullets, angleOffset) {
             y: dummy.y,
             dx: t(Math.cos(angle + angleOffset) * BULLET_VELOCITY),
             dy: t(Math.sin(angle + angleOffset) * BULLET_VELOCITY),
+            type: 'circular',
             size: 6
         });
     }
@@ -22,6 +23,7 @@ module.exports.bigRedBallAttack = function(dummy, bossBullets) {
         y: dummy.y,
         dx: t((Math.random() - 0.5) * 10),
         dy: t((Math.random() - 0.5) * 10),
+        type: 'bigRedBall',
         size: 20
     });
 }

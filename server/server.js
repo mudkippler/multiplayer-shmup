@@ -13,8 +13,6 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 const t = (n) => Math.round(n * 100) / 100;
 
-
-
 const TICK_RATE = 60;
 const BULLET_SPEED = 5;
 const PLAYER_SPEED = 5;
@@ -232,7 +230,7 @@ function gameLoop() {
         health: p.health
     })),
     bullets: bullets.map(b => ({ x: t(b.x), y: t(b.y), owner: b.owner })),
-    bossBullets: bossBullets.map(b => ({...b, id: b.id, x: t(b.x), y: t(b.y), dx: t(b.dx), dy: t(b.dy)}))
+    bossBullets: bossBullets.map(b => ({x: t(b.x), y: t(b.y), type: b.type}))
   };
 
   for (const client of wss.clients) {
