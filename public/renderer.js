@@ -39,7 +39,7 @@ export function draw(myId, players, bullets, bossBullets, dummy, fullDamageLog, 
     for (const b of bossBullets) {
         ctx.fillStyle = b.color;
         ctx.beginPath();
-        ctx.arc(b.x, b.y, 6, 0, Math.PI * 2);
+        ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
         ctx.fill();
     }
 

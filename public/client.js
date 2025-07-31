@@ -1,5 +1,6 @@
 import { draw } from './renderer.js';
 import { updateHUD } from './hud.js';
+import { updateDiagnostics, addReceivedBytes, addSentBytes } from './diagnostics.js';
 
 const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
 
@@ -12,6 +13,7 @@ let fullDamageLog = {};
 const damagePopups = [];
 
 socket.addEventListener('message', e => {
+    addReceivedBytes(e.data.length);
     const data = JSON.parse(e.data);
     if (data.type === 'init') {
         myId = data.id;
@@ -44,16 +46,21 @@ socket.addEventListener('message', e => {
 });
 
 document.addEventListener('keydown', e => {
-    socket.send(JSON.stringify({ type: 'keydown', key: e.key }));
+    const message = JSON.stringify({ type: 'keydown', key: e.key });
+    addSentBytes(message.length);
+    socket.send(message);
 });
 document.addEventListener('keyup', e => {
-    socket.send(JSON.stringify({ type: 'keyup', key: e.key }));
+    const message = JSON.stringify({ type: 'keyup', key: e.key });
+    addSentBytes(message.length);
+    socket.send(message);
 });
 
 function gameLoop() {
     const playerList = Object.values(players);
     draw(myId, playerList, bullets, bossBullets, dummy, fullDamageLog, damagePopups);
     updateHUD(myId, playerList);
+    updateDiagnostics();
     requestAnimationFrame(gameLoop);
 }
 

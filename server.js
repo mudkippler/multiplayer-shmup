@@ -2,7 +2,7 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+const { circularAttack, bigRedBallAttack } = require('./public/attacks.js');
 
 const app = express();
 const server = http.createServer(app);
@@ -10,24 +10,37 @@ const wss = new WebSocket.Server({ server });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+const t = (n) => Math.round(n * 100) / 100;
+
+function generateShortId(length = 6) {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
+
 const TICK_RATE = 60;
 const BULLET_SPEED = 15;
 const PLAYER_SPEED = 5;
+const BOSS_ATTACK_RATE = 100;
 const players = {};
 const bullets = [];
 const bossBullets = [];
 const dummy = { x: 400, y: 100, radius: 30, health: Infinity };
 const damageLog = {}; // id -> total damage
 let lastBossAttack = 0;
+let angleOffset = 0;
 
 wss.on('connection', (ws) => {
-  const id = uuidv4();
+  const id = generateShortId();
   players[id] = {
     x: Math.random() * 800,
     y: Math.random() * 600,
     vx: 0,
     vy: 0,
-    color: `hsl(${Math.random() * 360}, 100%, 50%)`,
+    color: `hsl(${t(Math.random() * 360)}, 100%, 50%)`,
     keys: {},
     lastShot: 0,
     lastActive: Date.now(),
@@ -36,7 +49,7 @@ wss.on('connection', (ws) => {
   damageLog[id] = 0;
   ws.id = id;
 
-  ws.send(JSON.stringify({ type: 'init', id, dummy }));
+  ws.send(JSON.stringify({ type: 'init', id, dummy: {...dummy, x: t(dummy.x), y: t(dummy.y)} }));
 
   ws.on('message', (msg) => {
     try {
@@ -104,18 +117,13 @@ function gameLoop() {
   }
 
   // Boss attacks
-  if (now - lastBossAttack > 2000) {
+  if (now - lastBossAttack > BOSS_ATTACK_RATE) {
     lastBossAttack = now;
-    const angleIncrement = Math.PI * 2 / 12;
-    for (let i = 0; i < 12; i++) {
-        const angle = i * angleIncrement;
-        bossBullets.push({
-            x: dummy.x,
-            y: dummy.y,
-            dx: Math.cos(angle) * 5,
-            dy: Math.sin(angle) * 5,
-            color: 'cyan'
-        });
+    circularAttack(dummy, bossBullets, angleOffset);
+    angleOffset += 0.1;
+
+    if (Math.random() < 0.1) {
+        bigRedBallAttack(dummy, bossBullets);
     }
   }
 
@@ -151,8 +159,8 @@ function gameLoop() {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
               type: 'damage',
-              x: b.x,
-              y: b.y,
+              x: t(b.x),
+              y: t(b.y),
               amount: -10,
               owner: b.owner
             }));
@@ -174,8 +182,8 @@ function gameLoop() {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({
             type: 'damage',
-            x: b.x,
-            y: b.y,
+            x: t(b.x),
+            y: t(b.y),
             amount: 10,
             owner: b.owner
           }));
@@ -196,7 +204,7 @@ function gameLoop() {
     for (const id in players) {
         const p = players[id];
         const dist = Math.hypot(b.x - p.x, b.y - p.y);
-        if (dist < 10) { // Player radius
+        if (dist < b.size) { // Player radius
             p.health -= 10;
             if (p.health <= 0) {
                 for (const client of wss.clients) {
@@ -224,13 +232,13 @@ function gameLoop() {
     type: 'state',
     players: Object.entries(players).map(([id, p]) => ({
         id,
-        x: p.x,
-        y: p.y,
+        x: t(p.x),
+        y: t(p.y),
         color: p.color,
         health: p.health
     })),
-    bullets: bullets.map(b => ({ x: b.x, y: b.y, owner: b.owner })),
-    bossBullets
+    bullets: bullets.map(b => ({ x: t(b.x), y: t(b.y), owner: b.owner })),
+    bossBullets: bossBullets.map(b => ({...b, x: t(b.x), y: t(b.y), dx: t(b.dx), dy: t(b.dy)}))
   };
 
   for (const client of wss.clients) {
@@ -254,6 +262,7 @@ setInterval(() => {
         }
     }
 }, 1000);
+
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
