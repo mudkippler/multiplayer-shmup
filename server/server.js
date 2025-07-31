@@ -3,6 +3,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
 const { circularAttack, bigRedBallAttack } = require('./attacks.js');
+const { generateShortId } = require('./utils.js');
 
 const app = express();
 const server = http.createServer(app);
@@ -12,14 +13,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 const t = (n) => Math.round(n * 100) / 100;
 
-function generateShortId(length = 6) {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let result = '';
-    for (let i = 0; i < length; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-}
+
 
 const TICK_RATE = 60;
 const BULLET_SPEED = 5;
@@ -119,24 +113,11 @@ function gameLoop() {
   // Boss attacks
   if (now - lastBossAttack > BOSS_ATTACK_RATE) {
     lastBossAttack = now;
-    const newBossBullets = [];
-    circularAttack(dummy, newBossBullets, angleOffset);
+    circularAttack(dummy, bossBullets, angleOffset);
     angleOffset += 0.1;
 
     if (Math.random() < 0.1) {
-        bigRedBallAttack(dummy, newBossBullets);
-    }
-    if (newBossBullets.length > 0) {
-      bossBullets.push(...newBossBullets);
-      const newBulletsMessage = JSON.stringify({
-        type: 'newBossBullets',
-        bullets: newBossBullets.map(b => ({...b, x: t(b.x), y: t(b.y), dx: t(b.dx), dy: t(b.dy)}))
-      });
-      for (const client of wss.clients) {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(newBulletsMessage);
-        }
-      }
+        bigRedBallAttack(dummy, bossBullets);
     }
   }
 
@@ -250,7 +231,8 @@ function gameLoop() {
         color: p.color,
         health: p.health
     })),
-    bullets: bullets.map(b => ({ x: t(b.x), y: t(b.y), owner: b.owner }))
+    bullets: bullets.map(b => ({ x: t(b.x), y: t(b.y), owner: b.owner })),
+    bossBullets: bossBullets.map(b => ({...b, id: b.id, x: t(b.x), y: t(b.y), dx: t(b.dx), dy: t(b.dy)}))
   };
 
   for (const client of wss.clients) {

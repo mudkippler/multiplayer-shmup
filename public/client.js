@@ -27,8 +27,7 @@ socket.addEventListener('message', e => {
         players = newPlayers;
 
         bullets = data.bullets;
-    } else if (data.type === 'newBossBullets') {
-        bossBullets.push(...data.bullets);
+        bossBullets = data.bossBullets; 
     } else if (data.type === 'leaderboard') {
         fullDamageLog = data.damageLog;
     } else if (data.type === 'damage') {
@@ -58,17 +57,6 @@ document.addEventListener('keyup', e => {
 });
 
 function gameLoop() {
-    // Update boss bullet positions
-    for (let i = bossBullets.length - 1; i >= 0; i--) {
-        const b = bossBullets[i];
-        b.x += b.dx;
-        b.y += b.dy;
-
-        if (b.x < 0 || b.x > 800 || b.y < 0 || b.y > 600) {
-            bossBullets.splice(i, 1);
-        }
-    }
-
     const playerList = Object.values(players);
     draw(myId, playerList, bullets, bossBullets, dummy, fullDamageLog, damagePopups);
     updateHUD(myId, playerList);

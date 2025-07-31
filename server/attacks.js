@@ -1,7 +1,7 @@
 const t = (n) => Math.round(n * 100) / 100;
 
-export function circularAttack(dummy, bossBullets, angleOffset) {
-    const BULLET_VELOCITY = 1;
+module.exports.circularAttack = function(dummy, bossBullets, angleOffset) {
+    const BULLET_VELOCITY = 3;
 
     const angleIncrement = Math.PI * 2 / 12;
     for (let i = 0; i < 12; i++) {
@@ -17,7 +17,7 @@ export function circularAttack(dummy, bossBullets, angleOffset) {
     }
 }
 
-export function bigRedBallAttack(dummy, bossBullets) {
+module.exports.bigRedBallAttack = function(dummy, bossBullets) {
     bossBullets.push({
         x: dummy.x,
         y: dummy.y,
