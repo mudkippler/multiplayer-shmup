@@ -2,13 +2,13 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
-const { circularAttack, bigRedBallAttack } = require('./public/attacks.js');
+const { circularAttack, bigRedBallAttack } = require('./attacks.js');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, '../public')));
 
 const t = (n) => Math.round(n * 100) / 100;
 
@@ -22,9 +22,9 @@ function generateShortId(length = 6) {
 }
 
 const TICK_RATE = 60;
-const BULLET_SPEED = 15;
+const BULLET_SPEED = 5;
 const PLAYER_SPEED = 5;
-const BOSS_ATTACK_RATE = 100;
+const BOSS_ATTACK_RATE = 250; //delay in ms between the boss attacks
 const players = {};
 const bullets = [];
 const bossBullets = [];
@@ -119,11 +119,24 @@ function gameLoop() {
   // Boss attacks
   if (now - lastBossAttack > BOSS_ATTACK_RATE) {
     lastBossAttack = now;
-    circularAttack(dummy, bossBullets, angleOffset);
+    const newBossBullets = [];
+    circularAttack(dummy, newBossBullets, angleOffset);
     angleOffset += 0.1;
 
     if (Math.random() < 0.1) {
-        bigRedBallAttack(dummy, bossBullets);
+        bigRedBallAttack(dummy, newBossBullets);
+    }
+    if (newBossBullets.length > 0) {
+      bossBullets.push(...newBossBullets);
+      const newBulletsMessage = JSON.stringify({
+        type: 'newBossBullets',
+        bullets: newBossBullets.map(b => ({...b, x: t(b.x), y: t(b.y), dx: t(b.dx), dy: t(b.dy)}))
+      });
+      for (const client of wss.clients) {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(newBulletsMessage);
+        }
+      }
     }
   }
 
@@ -237,8 +250,7 @@ function gameLoop() {
         color: p.color,
         health: p.health
     })),
-    bullets: bullets.map(b => ({ x: t(b.x), y: t(b.y), owner: b.owner })),
-    bossBullets: bossBullets.map(b => ({...b, x: t(b.x), y: t(b.y), dx: t(b.dx), dy: t(b.dy)}))
+    bullets: bullets.map(b => ({ x: t(b.x), y: t(b.y), owner: b.owner }))
   };
 
   for (const client of wss.clients) {
