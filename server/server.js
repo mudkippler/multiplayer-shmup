@@ -11,7 +11,7 @@ const server = http.createServer(app);
 
 const USE_MSGPACK_COMPRESSION = true; // Set to false to use JSON instead of MessagePack
 
-const wss = new WebSocket.Server({ server, perMessageDeflate: false });
+const wss = new WebSocket.Server({ server });
 
 let serialize, deserialize;
 
@@ -33,7 +33,7 @@ let playerIdCounter = 0;
 const TICK_RATE = 15;
 const BULLET_SPEED = 7;
 const PLAYER_SPEED = 5;
-const BOSS_ATTACK_RATE = 500; //delay in ms between the boss attacks
+const BOSS_ATTACK_RATE = 20; //delay in ms between the boss attacks
 const players = {};
 const bullets = [];
 const bossBullets = [];
@@ -255,7 +255,6 @@ server.listen(PORT, () => {
 
 
 // functions
-
 function checkBossBulletCollisions(bossBullets, players, wss, t, serialize) {
   for (let i = bossBullets.length - 1; i >= 0; i--) {
     const b = bossBullets[i];

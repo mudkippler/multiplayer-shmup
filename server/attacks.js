@@ -3,10 +3,11 @@ const t = (n) => Math.round(n * 100) / 100;
 let bulletIdCounter = 0;
 
 module.exports.circularAttack = function(dummy, bossBullets, angleOffset) {
-    const BULLET_VELOCITY = 3;
+    const BULLET_VELOCITY = 20;
+    let numberOfAngles = 4;
 
-    const angleIncrement = Math.PI * 2 / 12;
-    for (let i = 0; i < 12; i++) {
+    const angleIncrement = Math.PI * 2 / numberOfAngles;
+    for (let i = 0; i < numberOfAngles; i++) {
         const angle = i * angleIncrement;
         bossBullets.push({
             id: bulletIdCounter++,
