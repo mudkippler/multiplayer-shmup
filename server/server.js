@@ -4,6 +4,7 @@ const WebSocket = require('ws');
 const path = require('path');
 const { circularAttack, bigRedBallAttack } = require('./attacks.js');
 const { generateShortId } = require('./utils.js');
+const { serialize, deserialize } = require('@ygoe/msgpack');
 
 const app = express();
 const server = http.createServer(app);
@@ -41,11 +42,11 @@ wss.on('connection', (ws) => {
   damageLog[id] = 0;
   ws.id = id;
 
-  ws.send(JSON.stringify({ type: 'init', id, dummy: {...dummy, x: t(dummy.x), y: t(dummy.y)} }));
+  ws.send(serialize({ type: 'init', id, dummy: {...dummy, x: t(dummy.x), y: t(dummy.y)} }));
 
   ws.on('message', (msg) => {
     try {
-      const data = JSON.parse(msg);
+      const data = deserialize(new Uint8Array(msg));
       if (data.type === 'keydown' || data.type === 'keyup') {
         players[id].keys[data.key] = data.type === 'keydown';
         players[id].lastActive = Date.now();
@@ -61,7 +62,6 @@ wss.on('connection', (ws) => {
 
 function gameLoop() {
   const now = Date.now();
-
 
   // Despawn players inactive for 60 seconds
   for (const id in players) {
@@ -136,10 +136,10 @@ function gameLoop() {
         damageLog[b.owner] = (damageLog[b.owner] || 0) - 10;
 
         if (p.health <= 0) {
-            for (const client of wss.clients) {
-                if (client.id === id) {
-                    if (client.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify({ type: 'dead' }));
+          for (const client of wss.clients) {
+              if (client.id === id) {
+                  if (client.readyState === WebSocket.OPEN) {
+                    client.send(msgpack.encode({ type: 'dead' }));
                     }
                     client.terminate(); // Triggers 'close' event which handles cleanup
                     break;
@@ -149,7 +149,7 @@ function gameLoop() {
 
         wss.clients.forEach(ws => {
           if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
+            ws.send(serialize({
               type: 'damage',
               x: t(b.x),
               y: t(b.y),
@@ -172,7 +172,7 @@ function gameLoop() {
       damageLog[b.owner] = (damageLog[b.owner] || 0) + 10;
       wss.clients.forEach(ws => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
+          ws.send(serialize({
             type: 'damage',
             x: t(b.x),
             y: t(b.y),
@@ -188,36 +188,7 @@ function gameLoop() {
   }
 
   // Update boss bullets
-  for (let i = bossBullets.length - 1; i >= 0; i--) {
-    const b = bossBullets[i];
-    b.x += b.dx;
-    b.y += b.dy;
-
-    for (const id in players) {
-        const p = players[id];
-        const dist = Math.hypot(b.x - p.x, b.y - p.y);
-        if (dist < b.size) { // Player radius
-            p.health -= 10;
-            if (p.health <= 0) {
-                for (const client of wss.clients) {
-                    if (client.id === id) {
-                        if (client.readyState === WebSocket.OPEN) {
-                            client.send(JSON.stringify({ type: 'dead' }));
-                        }
-                        client.terminate();
-                        break;
-                    }
-                }
-            }
-            bossBullets.splice(i, 1);
-            break;
-        }
-    }
-
-    if (b.x < 0 || b.x > 800 || b.y < 0 || b.y > 600) {
-        bossBullets.splice(i, 1);
-    }
-  }
+  checkBossBulletCollisions(bossBullets, players, wss, t, serialize);
 
   // Send game state
   const state = {
@@ -235,7 +206,7 @@ function gameLoop() {
 
   for (const client of wss.clients) {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(state));
+      client.send(serialize(state));
     }
   }
 }
@@ -250,7 +221,7 @@ setInterval(() => {
     };
     for (const client of wss.clients) {
         if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(leaderboard));
+            client.send(serialize(leaderboard));
         }
     }
 }, 1000);
@@ -260,3 +231,39 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+
+// functions
+
+function checkBossBulletCollisions(bossBullets, players, wss, t, serialize) {
+  for (let i = bossBullets.length - 1; i >= 0; i--) {
+    const b = bossBullets[i];
+    b.x += b.dx;
+    b.y += b.dy;
+
+    for (const id in players) {
+        const p = players[id];
+        const dist = Math.hypot(b.x - p.x, b.y - p.y);
+        if (dist < b.size) { // Player radius
+            p.health -= 10;
+            if (p.health <= 0) {
+              for (const client of wss.clients) {
+                if (client.id === id) {
+                  if (client.readyState === WebSocket.OPEN) {
+                    client.send(serialize({ type: 'dead' }));
+                  }
+                  client.terminate();
+                  break;
+                }
+              }
+            }
+            bossBullets.splice(i, 1);
+            break;
+        }
+    }
+
+    if (b.x < 0 || b.x > 800 || b.y < 0 || b.y > 600) {
+        bossBullets.splice(i, 1);
+    }
+  }
+}

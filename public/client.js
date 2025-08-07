@@ -14,13 +14,17 @@ let dummy = {};
 let fullDamageLog = {};
 const damagePopups = [];
 
-socket.addEventListener('message', e => {
-    addReceivedBytes(e.data.length);
-    const data = JSON.parse(e.data);
+socket.addEventListener('message', async e => {
+    addReceivedBytes(e.data.size);
+    const data = msgpack.deserialize(new Uint8Array(await e.data.arrayBuffer()));
+
     if (data.type === 'init') {
         myId = data.id;
         dummy = data.dummy;
-    } else if (data.type === 'state') {
+        return;
+    }
+
+    if (data.type === 'state') {
         // Update players object, keeping color property
         const newPlayers = {};
         for (const p of data.players) {
@@ -42,10 +46,16 @@ socket.addEventListener('message', e => {
             existingBullet.history = existingBullet.history.filter(s => now - s.timestamp < 200);
         }
         // Remove bullets that are no longer in the server update
-        bossBullets = bossBullets.filter(b => data.bossBullets.some(nb => nb.id === b.id)); 
-    } else if (data.type === 'leaderboard') {
+        bossBullets = bossBullets.filter(b => data.bossBullets.some(nb => nb.id === b.id));
+        return;
+    }
+
+    if (data.type === 'leaderboard') {
         fullDamageLog = data.damageLog;
-    } else if (data.type === 'damage') {
+        return;
+    }
+
+    if (data.type === 'damage') {
         const owner = players[data.owner];
         damagePopups.push({
             x: data.x,
@@ -55,18 +65,23 @@ socket.addEventListener('message', e => {
             alpha: 1,
             dy: -0.5
         });
-    } else if (data.type === 'dead') {
+        return;
+    }
+
+    if (data.type === 'dead') {
         document.getElementById('death-screen').style.display = 'block';
+        return;
     }
 });
 
 document.addEventListener('keydown', e => {
-    const message = JSON.stringify({ type: 'keydown', key: e.key });
+    const message = msgpack.serialize({ type: 'keydown', key: e.key });
     addSentBytes(message.length);
     socket.send(message);
 });
+
 document.addEventListener('keyup', e => {
-    const message = JSON.stringify({ type: 'keyup', key: e.key });
+    const message = msgpack.serialize({ type: 'keyup', key: e.key });
     addSentBytes(message.length);
     socket.send(message);
 });
