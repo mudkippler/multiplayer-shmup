@@ -39,10 +39,10 @@ export function draw(myId, players, bullets, bossBullets, dummy, fullDamageLog, 
     for (const b of bossBullets) {
         let color;
         let size;
-        if (b.type === 'circular') {
+        if (b.type === 1) {
             color = 'cyan';
             size = 6;
-        } else if (b.type === 'bigRedBall') {
+        } else if (b.type === 2) {
             color = 'red';
             size = 20;
         }

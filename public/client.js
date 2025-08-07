@@ -4,6 +4,18 @@ import { updateDiagnostics, addReceivedBytes, addSentBytes } from './diagnostics
 
 const INTERPOLATION_DELAY = 100; // milliseconds
 
+const USE_MSGPACK_COMPRESSION = true; // Must match server setting
+
+let serializer, deserializer;
+
+if (USE_MSGPACK_COMPRESSION) {
+    serializer = msgpack.serialize;
+    deserializer = msgpack.deserialize;
+} else {
+    serializer = JSON.stringify;
+    deserializer = JSON.parse;
+}
+
 const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
 
 let myId = null;
@@ -14,9 +26,18 @@ let dummy = {};
 let fullDamageLog = {};
 const damagePopups = [];
 
+const movementKeys = {}; // Store current state of movement keys
+let movementKeysInterval;
+
 socket.addEventListener('message', async e => {
-    addReceivedBytes(e.data.size);
-    const data = msgpack.deserialize(new Uint8Array(await e.data.arrayBuffer()));
+    let data;
+    if (USE_MSGPACK_COMPRESSION) {
+        data = deserializer(new Uint8Array(await e.data.arrayBuffer()));
+        addReceivedBytes(e.data.size);
+    } else {
+        data = deserializer(e.data);
+        addReceivedBytes(e.data.length);
+    }
 
     if (data.type === 'init') {
         myId = data.id;
@@ -75,16 +96,41 @@ socket.addEventListener('message', async e => {
 });
 
 document.addEventListener('keydown', e => {
-    const message = msgpack.serialize({ type: 'keydown', key: e.key });
-    addSentBytes(message.length);
-    socket.send(message);
+    const movementKeysMap = {
+        'w': 'ArrowUp', 'a': 'ArrowLeft', 's': 'ArrowDown', 'd': 'ArrowRight',
+        'ArrowUp': 'ArrowUp', 'ArrowLeft': 'ArrowLeft', 'ArrowDown': 'ArrowDown', 'ArrowRight': 'ArrowRight'
+    };
+
+    if (movementKeysMap[e.key]) {
+        movementKeys[movementKeysMap[e.key]] = true;
+    } else if (e.key === ' ' || e.key === 'Space') {
+        const message = serializer({ type: 'keydown', key: e.key });
+        socket.send(message);
+        addSentBytes(message.length);
+    }
 });
 
 document.addEventListener('keyup', e => {
-    const message = msgpack.serialize({ type: 'keyup', key: e.key });
-    addSentBytes(message.length);
-    socket.send(message);
+    const movementKeysMap = {
+        'w': 'ArrowUp', 'a': 'ArrowLeft', 's': 'ArrowDown', 'd': 'ArrowRight',
+        'ArrowUp': 'ArrowUp', 'ArrowLeft': 'ArrowLeft', 'ArrowDown': 'ArrowDown', 'ArrowRight': 'ArrowRight'
+    };
+
+    if (movementKeysMap[e.key]) {
+        movementKeys[movementKeysMap[e.key]] = false;
+    } else if (e.key === ' ' || e.key === 'Space') {
+        const message = serializer({ type: 'keyup', key: e.key });
+        socket.send(USE_MSGPACK_COMPRESSION ? message.buffer : message);
+        addSentBytes(USE_MSGPACK_COMPRESSION ? message.byteLength : message.length);
+    }
 });
+
+// Send movement keys state to server every 100ms (or server tick rate)
+movementKeysInterval = setInterval(() => {
+    const message = serializer({ type: 'movementUpdate', keys: movementKeys });
+    socket.send(USE_MSGPACK_COMPRESSION ? message.buffer : message);
+    addSentBytes(USE_MSGPACK_COMPRESSION ? message.byteLength : message.length);
+}, 100); // Assuming a 100ms tick rate for movement updates
 
 function gameLoop() {
     const playerList = Object.values(players);

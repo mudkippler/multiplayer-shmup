@@ -3,21 +3,37 @@ const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
 const { circularAttack, bigRedBallAttack } = require('./attacks.js');
-const { generateShortId } = require('./utils.js');
-const { serialize, deserialize } = require('@ygoe/msgpack');
+const msgpack = require('@ygoe/msgpack');
+
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+
+const USE_MSGPACK_COMPRESSION = true; // Set to false to use JSON instead of MessagePack
+
+const wss = new WebSocket.Server({ server, perMessageDeflate: false });
+
+let serialize, deserialize;
+
+if (USE_MSGPACK_COMPRESSION) {
+  serialize = msgpack.serialize;
+  deserialize = msgpack.deserialize;
+} else {
+  serialize = JSON.stringify;
+  deserialize = JSON.parse;
+}
 
 app.use(express.static(path.join(__dirname, '../public')));
 
-const t = (n) => Math.round(n * 100) / 100;
+const t = (n) => Math.round(n * 10) / 10;
 
-const TICK_RATE = 30;
-const BULLET_SPEED = 5;
+let bulletIdCounter = 0;
+let playerIdCounter = 0;
+
+const TICK_RATE = 15;
+const BULLET_SPEED = 7;
 const PLAYER_SPEED = 5;
-const BOSS_ATTACK_RATE = 250; //delay in ms between the boss attacks
+const BOSS_ATTACK_RATE = 500; //delay in ms between the boss attacks
 const players = {};
 const bullets = [];
 const bossBullets = [];
@@ -27,7 +43,9 @@ let lastBossAttack = 0;
 let angleOffset = 0;
 
 wss.on('connection', (ws) => {
-  const id = generateShortId();
+  const id = playerIdCounter;
+  playerIdCounter++
+
   players[id] = {
     x: Math.random() * 800,
     y: Math.random() * 600,
@@ -49,6 +67,9 @@ wss.on('connection', (ws) => {
       const data = deserialize(new Uint8Array(msg));
       if (data.type === 'keydown' || data.type === 'keyup') {
         players[id].keys[data.key] = data.type === 'keydown';
+        players[id].lastActive = Date.now();
+      } else if (data.type === 'movementUpdate') {
+        players[id].keys = { ...players[id].keys, ...data.keys };
         players[id].lastActive = Date.now();
       }
     } catch (e) {}
