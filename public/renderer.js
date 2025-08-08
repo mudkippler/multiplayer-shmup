@@ -11,10 +11,12 @@ export function draw(myId, players, bullets, bossBullets, dummy, fullDamageLog, 
     ctx.fill();
 
     // Players
+    const PLAYER_RADIUS = 10;
+
     for (const p of players) {
         ctx.fillStyle = p.color;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, PLAYER_RADIUS, 0, Math.PI * 2);
         ctx.fill();
 
         // Health bar

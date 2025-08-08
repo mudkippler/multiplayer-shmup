@@ -2,7 +2,7 @@ import { draw } from './renderer.js';
 import { updateHUD } from './hud.js';
 import { updateDiagnostics, addReceivedBytes, addSentBytes } from './diagnostics.js';
 
-const INTERPOLATION_DELAY = 100; // milliseconds
+const INTERPOLATION_DELAY = 50; // milliseconds
 
 const USE_MSGPACK_COMPRESSION = true; // Must match server setting
 
@@ -46,21 +46,42 @@ socket.addEventListener('message', async e => {
     }
 
     if (data.type === 'state') {
-        // Update players object, keeping color property
+        const now = performance.now();
+
+        // Update players object with interpolation history
         const newPlayers = {};
         for (const p of data.players) {
-            newPlayers[p.id] = { ...players[p.id], ...p };
+            const existingPlayer = players[p.id] || {};
+            const newPlayer = { ...existingPlayer, ...p, history: existingPlayer.history || [] };
+            
+            newPlayer.history.push({ x: p.x, y: p.y, timestamp: now });
+            newPlayer.history = newPlayer.history.filter(s => now - s.timestamp < 200);
+            newPlayers[p.id] = newPlayer;
         }
         players = newPlayers;
 
-        bullets = data.bullets;
+        // Update player bullets with interpolation history
+        for (const newBullet of data.bullets) {
+            let existingBullet = bullets.find(b => b.id === newBullet.id);
+            if (!existingBullet) {
+                existingBullet = { ...newBullet, history: [] };
+                bullets.push(existingBullet);
+            } else {
+                Object.assign(existingBullet, newBullet);
+            }
+            existingBullet.history.push({ x: newBullet.x, y: newBullet.y, timestamp: now });
+            existingBullet.history = existingBullet.history.filter(s => now - s.timestamp < 200);
+        }
+        bullets = bullets.filter(b => data.bullets.some(nb => nb.id === b.id));
+
         // Store boss bullet states with timestamps for interpolation
-        const now = performance.now();
         for (const newBullet of data.bossBullets) {
             let existingBullet = bossBullets.find(b => b.id === newBullet.id);
             if (!existingBullet) {
-                existingBullet = { id: newBullet.id, type: newBullet.type, history: [] };
+                existingBullet = { ...newBullet, history: [] };
                 bossBullets.push(existingBullet);
+            } else {
+                Object.assign(existingBullet, newBullet);
             }
             existingBullet.history.push({ x: newBullet.x, y: newBullet.y, timestamp: now });
             // Keep history clean (e.g., only last 200ms of data)
@@ -132,44 +153,60 @@ movementKeysInterval = setInterval(() => {
     addSentBytes(USE_MSGPACK_COMPRESSION ? message.byteLength : message.length);
 }, 100); // Assuming a 100ms tick rate for movement updates
 
-function gameLoop() {
-    const playerList = Object.values(players);
+function getInterpolatedPosition(entity, now) {
+    let interpolatedX = entity.x;
+    let interpolatedY = entity.y;
 
-    const now = performance.now();
-    const interpolatedBossBullets = [];
-
-    for (const b of bossBullets) {
-        let interpolatedX = b.x;
-        let interpolatedY = b.y;
-
-        // Find the two states to interpolate between
-        let stateA = null;
-        let stateB = null;
-        for (let i = b.history.length - 1; i >= 0; i--) {
-            if (b.history[i].timestamp <= now - INTERPOLATION_DELAY) {
-                stateA = b.history[i];
-                if (i + 1 < b.history.length) {
-                    stateB = b.history[i + 1];
-                }
-                break;
-            }
-        }
-
-        if (stateA && stateB) {
-            const t = (now - INTERPOLATION_DELAY - stateA.timestamp) / (stateB.timestamp - stateA.timestamp);
-            interpolatedX = stateA.x + (stateB.x - stateA.x) * t;
-            interpolatedY = stateA.y + (stateB.y - stateA.y) * t;
-        } else if (stateA) {
-            // Only one state, use it directly
-            interpolatedX = stateA.x;
-            interpolatedY = stateA.y;
-        }
-
-        interpolatedBossBullets.push({ ...b, x: interpolatedX, y: interpolatedY });
+    if (!entity.history || entity.history.length < 2) {
+        return { x: interpolatedX, y: interpolatedY };
     }
 
-    draw(myId, playerList, bullets, interpolatedBossBullets, dummy, fullDamageLog, damagePopups);
-    updateHUD(myId, playerList);
+    // Find the two states to interpolate between
+    let stateA = null;
+    let stateB = null;
+    for (let i = entity.history.length - 1; i >= 0; i--) {
+        if (entity.history[i].timestamp <= now - INTERPOLATION_DELAY) {
+            stateA = entity.history[i];
+            if (i + 1 < entity.history.length) {
+                stateB = entity.history[i + 1];
+            }
+            break;
+        }
+    }
+
+    if (stateA && stateB) {
+        const t = (now - INTERPOLATION_DELAY - stateA.timestamp) / (stateB.timestamp - stateA.timestamp);
+        interpolatedX = stateA.x + (stateB.x - stateA.x) * t;
+        interpolatedY = stateA.y + (stateB.y - stateA.y) * t;
+    } else if (stateA) {
+        // Not enough history to interpolate, use the most recent valid state
+        interpolatedX = stateA.x;
+        interpolatedY = stateA.y;
+    }
+
+    return { x: interpolatedX, y: interpolatedY };
+}
+
+function gameLoop() {
+    const now = performance.now();
+
+    const interpolatedPlayers = Object.values(players).map(p => {
+        const { x, y } = getInterpolatedPosition(p, now);
+        return { ...p, x, y };
+    });
+
+    const interpolatedBullets = bullets.map(b => {
+        const { x, y } = getInterpolatedPosition(b, now);
+        return { ...b, x, y };
+    });
+
+    const interpolatedBossBullets = bossBullets.map(b => {
+        const { x, y } = getInterpolatedPosition(b, now);
+        return { ...b, x, y };
+    });
+
+    draw(myId, interpolatedPlayers, interpolatedBullets, interpolatedBossBullets, dummy, fullDamageLog, damagePopups);
+    updateHUD(myId, Object.values(players));
     updateDiagnostics();
     requestAnimationFrame(gameLoop);
 }

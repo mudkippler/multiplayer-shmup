@@ -31,8 +31,9 @@ let bulletIdCounter = 0;
 let playerIdCounter = 0;
 
 const TICK_RATE = 15;
-const BULLET_SPEED = 7;
-const PLAYER_SPEED = 5;
+const PLAYER_BULLET_SPEED = 25;
+const PLAYER_SPEED = 10;
+const PLAYER_RADIUS = 10;
 const BOSS_ATTACK_RATE = 20; //delay in ms between the boss attacks
 const players = {};
 const bullets = [];
@@ -47,6 +48,7 @@ wss.on('connection', (ws) => {
   playerIdCounter++
 
   players[id] = {
+    id,
     x: Math.random() * 800,
     y: Math.random() * 600,
     vx: 0,
@@ -120,10 +122,11 @@ function gameLoop() {
     if ((p.keys[' '] || p.keys['Space']) && now - p.lastShot > 200) {
       p.lastShot = now;
       bullets.push({
+        id: bulletIdCounter++,
         x: p.x,
         y: p.y,
         dx: 0,
-        dy: -BULLET_SPEED,
+        dy: -PLAYER_BULLET_SPEED,
         owner: id
       });
     }
@@ -148,11 +151,13 @@ function gameLoop() {
 
     let hit = false;
     // Player collision
+    
+
     for (const id in players) {
       if (id === b.owner) continue;
       const p = players[id];
       const dist = Math.hypot(b.x - p.x, b.y - p.y);
-      if (dist < 10) { // Player radius
+      if (dist < PLAYER_RADIUS) { // Player radius
         p.health -= 10;
         damageLog[b.owner] = (damageLog[b.owner] || 0) - 10;
 
@@ -212,22 +217,17 @@ function gameLoop() {
   checkBossBulletCollisions(bossBullets, players, wss, t, serialize);
 
   // Send game state
-  const state = {
-    type: 'state',
-    players: Object.entries(players).map(([id, p]) => ({
-        id,
-        x: t(p.x),
-        y: t(p.y),
-        color: p.color,
-        health: p.health
-    })),
-    bullets: bullets.map(b => ({ x: t(b.x), y: t(b.y), owner: b.owner })),
-    bossBullets: bossBullets.map(b => ({id: b.id, x: t(b.x), y: t(b.y), type: b.type}))
-  };
+  const message = serialize({
+      type: 'state',
+      players: Object.values(players).map(p => ({ id: p.id, x: t(p.x), y: t(p.y), name: p.name, hp: p.hp, maxHp: p.maxHp })),
+      bullets: bullets.map(b => ({ id: b.id, x: t(b.x), y: t(b.y), owner: b.owner, type: b.type })),
+      bossBullets: bossBullets.map(b => ({ id: b.id, x: t(b.x), y: t(b.y), type: b.type })),
+      dummy: { x: t(dummy.x), y: t(dummy.y), hp: dummy.hp, maxHp: dummy.maxHp }
+  });
 
   for (const client of wss.clients) {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(serialize(state));
+      client.send(message);
     }
   }
 }
@@ -264,7 +264,7 @@ function checkBossBulletCollisions(bossBullets, players, wss, t, serialize) {
     for (const id in players) {
         const p = players[id];
         const dist = Math.hypot(b.x - p.x, b.y - p.y);
-        if (dist < b.size) { // Player radius
+        if (dist < b.size + PLAYER_RADIUS - 5) { // Player radius
             p.health -= 10;
             if (p.health <= 0) {
               for (const client of wss.clients) {
